@@ -1,0 +1,18 @@
+#To gather facts
+#ansible all -m setup -i vprofil
+
+- name: Print Facts
+  hosts: all
+
+  tasks:
+    - name: Print OS NAME
+      debug:
+        var: ansible_distribution
+    - name: PRINT IPV4 Alias
+      debug:
+        var: ansible_default_ipv4.alias
+    - name: PRINT DATE
+      debug:
+        var: ansible_date_time.date
+
+
