@@ -1,0 +1,44 @@
+- name: Provision Server
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: Install packages on CentOS
+      yum:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - chrony
+        - zip
+        - unzip
+        - wget
+        - git
+      when: ansible_distribution == "CentOS"
+
+    - name: Install packages on Ubuntu
+      apt:
+        name: "{{ item }}"
+        state: present
+        update_cache: yes
+      loop:
+        - ntp
+        - zip
+        - unzip
+        - wget
+        - git
+      when: ansible_distribution == "Ubuntu"
+
+    - name: Start and enable NTP service on CentOS
+      systemd:
+        name: chronyd
+        state: started
+        enabled: yes
+      when: ansible_distribution == "CentOS"
+
+    - name: Start and enable NTP service on Ubuntu
+      systemd:
+        name: ntp
+        state: started
+        enabled: yes
+      when: ansible_distribution == "Ubuntu"
