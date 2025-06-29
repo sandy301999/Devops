@@ -1,0 +1,22 @@
+web_db.yaml
+---
+- name: WebServer setup
+  hosts: webservers
+  become: yes
+  tasks:
+    - name: Install httpd
+      ansible.builtin.yum:
+        name: httpd
+        state: present
+    - name: Start and enable httpd service
+      ansible.builtin.service:
+        name: httpd
+        state: started
+        enabled: yes
+
+    - name: Copy index file
+      ansible.builtin.copy:
+        src: /root/Ansible/exc6/index.html
+        dest: /var/www/html/index.html
+
+#This will install http, start, enable and copy index.html file to remote server (web01, 2)
