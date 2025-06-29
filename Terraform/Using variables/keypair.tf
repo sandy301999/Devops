@@ -1,0 +1,4 @@
+resource "aws_key_pair" "sample-key" {
+  key_name   = "dove-key-hehe"
+  public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJmV27AYVXq6a5rwIF8Bz8V2rl7/5N9adhNnCz+715Th sande@Sandesh"
+}
