@@ -1,0 +1,62 @@
+Handlers will not get executed until it's notified
+
+- name: Provision Server
+  hosts: all
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: Copy template on CentOS
+      template:
+        src: templates/check.txt
+        dest: /tmp/check.txt
+        backup: yes
+      notify: Restart NTP Service on CentOS
+      when: ansible_distribution == "CentOS"
+
+    - name: Copy template on Ubuntu
+      template:
+        src: templates/check.txt
+        dest: /tmp/check.txt
+        backup: yes
+      notify: Restart Chrony Service on Ubuntu
+      when: ansible_distribution == "Ubuntu"
+
+    - name: Install NTP service on CentOS
+      yum:
+        name: chrony
+        state: present
+      when: ansible_distribution == "CentOS"
+
+    - name: Install Chrony service on Ubuntu
+      apt:
+        name: chrony
+        state: present
+      when: ansible_distribution == "Ubuntu"
+
+    - name: Start and enable NTP service on CentOS
+      systemd:
+        name: chronyd
+        state: started
+        enabled: yes
+      when: ansible_distribution == "CentOS"
+
+    - name: Start and enable Chrony service on Ubuntu
+      systemd:
+        name: chrony
+        state: started
+        enabled: yes
+      when: ansible_distribution == "Ubuntu"
+
+  handlers:
+    - name: Restart NTP Service on CentOS
+      service:
+        name: chronyd
+        state: restarted
+
+    - name: Restart Chrony Service on Ubuntu
+      service:
+        name: chrony
+        state: restarted
+
+
