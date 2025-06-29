@@ -1,0 +1,58 @@
+
+https://docs.ansible.com/ansible/latest/collections/amazon/aws/docsite/guide_aws.html
+
+	1. Create an ansible user with admin access in IAM. Generate access key CLI for that.
+	export AWS_ACCESS_KEY_ID=''
+	export AWS_SECRET_ACCESS_KEY='+9HjtbMX4euaZuh'
+	
+
+	2. Add these 2 lines in vim .bashrc so that everytime it exports for a new session
+
+
+	3. Create a playbook 
+	
+	root@ControlServer:~/Ansible/aws# cat ec2-privatekey.yml
+	- hosts: localhost
+	  gather_facts: False
+	  tasks:
+	    - name: Create Key pair via Control server using IAM user with Ansible
+	      ec2_key:
+	        name: sample
+	        region: us-east-1
+	
+	
+	4. No output and private key was generated. So in order to print this mdify the playbook
+	
+	- hosts: localhost
+	  gather_facts: False
+	  tasks:
+	    - name: Create Key pair via Control server using IAM user with Ansible
+	      ec2_key:
+	        name: sample
+	        region: us-east-1
+	      register: op
+	
+	    - name: printing output
+	      debug:
+	        var: op
+	
+	5. In order to save the op to a file use the below
+	
+	- hosts: localhost
+	  gather_facts: False
+	  tasks:
+	    - name: Create Key pair via Control server using IAM user with Ansible
+	      ec2_key:
+	        name: sample
+	        region: us-east-1
+	      register: op
+	
+	    - name: printing output
+	      debug:
+	        var: op
+	
+	    - name: Save the file
+	      copy:
+	        content: "{{op.key.private_key}}"
+	        dest: ./sample.pem
+	      when: op.changed == True
