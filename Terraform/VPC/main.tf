@@ -157,14 +157,4 @@ resource "aws_instance" "bastion" {
   }
 }
 
-# NACLs (Optional basic setup)
-resource "aws_network_acl" "main" {
-  vpc_id = aws_vpc.main.id
-  tags = {
-    Name = "main-nacl"
-  }
-}
-
-# VPC Peering Placeholder
-# Define 1 more VPC and create aws_vpc_peering_connection (not included unless requested)
 
