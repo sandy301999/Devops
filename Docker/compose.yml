@@ -1,0 +1,124 @@
+	
+	1. To Build tomcat image -> where mvn install is run and root.war is copied
+	
+	
+	FROM maven:3.9.9-eclipse-temurin-21-jammy AS MVNIMAGE
+	RUN git clone https://github.com/devopshydclub/vprofile-project.git
+	RUN cd vprofile-project && git checkout containers && mvn install
+	
+	FROM tomcat:10-jdk21
+	RUN rm -f /usr/local/tomcat/webapps/*
+	COPY --from=MVNIMAGE vprofile-project/target/vprofile-v2.war /usr/local/tomcat/webapps/ROOT.war
+	EXPOSE 8080
+	
+	
+	2. DB
+
+	
+	# Use the MySQL 8.0.33 base image
+	FROM mysql:8.0.33
+	# Add metadata for documentation
+	LABEL project="vprofile"
+	# Set MySQL environment variables
+	# These are used by the MySQL Docker image to configure the initial database setup
+	ENV MYSQL_ROOT_PASSWORD="vprodbpass" 
+	ENV MYSQL_DATABASE="accounts"
+	# Add the SQL backup file to the initialization directory
+	# MySQL will execute any .sql or .sh files in this directory on container startup
+	ADD db_backup.sql /docker-entrypoint-initdb.d/db_backup.sql
+	
+	
+	3. Web
+	
+	FROM nginx
+	LABEL "Project"="Vprofile"
+	LABEL "Author"="Imran"
+	
+	RUN rm -rf /etc/nginx/conf.d/default.conf
+	COPY nginxvproapp.conf /etc/nginx/conf.d/vproapp.conf
+	
+	
+	
+	3. Docker-compose
+	
+	
+	version: "3.8"
+	# Specify the Docker Compose version to ensure compatibility with the features being used.
+	services:
+	
+	  vprodb:
+	    # Defines the database service (MySQL) for the application.
+	    build:
+	      context: ./Docker-files/db
+	      # Specifies the path to the Dockerfile for building the database image.
+	    image: vprocontainers/vprofiledb
+	      # Custom image name for the database service.
+	    container_name: vprodb
+	      # Assigns a specific name to the container for easier management.
+	    ports:
+	      - "3306:3306"
+	      # Maps MySQL's default port (3306) from the container to the host machine.
+	    volumes:
+	      - vprodbdata:/var/lib/mysql
+	      # Persists database data in a named volume to ensure data is not lost when the container restarts.
+	    environment:
+	      - MYSQL_ROOT_PASSWORD=vprodbpass
+	      # Sets the root password for MySQL (required for initialization).
+	
+	  vprocache01:
+	    # Defines a caching service using Memcached.
+	    image: memcached
+	      # Official Memcached image.
+	    ports:
+	      - "11211:11211"
+	      # Maps Memcached's default port (11211) to the host.
+	
+	  vpromq01:
+	    # Defines a messaging service using RabbitMQ.
+	    image: rabbitmq
+	      # Official RabbitMQ image.
+	    ports:
+	      - "5672:5672"
+	      # Maps RabbitMQ's default AMQP port (5672) to the host.
+	    environment:
+	      - RABBITMQ_DEFAULT_USER=guest
+	      - RABBITMQ_DEFAULT_PASS=guest
+	      # Sets default username and password for RabbitMQ.
+	  vproapp:
+	    # Defines the application backend service (Java app running in Tomcat).
+	    build:
+	      context: ./Docker-files/app
+	      # Specifies the path to the Dockerfile for building the backend image.
+	    image: vprocontainers/vprofileapp
+	      # Custom image name for the backend service.
+	    container_name: vproapp
+	      # Assigns a specific name to the backend container.
+	    ports:
+	      - "8080:8080"
+	      # Maps the backend's port (8080) from the container to the host.
+	    volumes:
+	      - vproappdata:/usr/local/tomcat/webapps
+	      # Mounts a volume for the Tomcat webapps directory, allowing persistence or easy updates to deployed applications.
+	  vproweb:
+	    # Defines the frontend web service (likely an Nginx or Apache web server).
+	    build:
+	      context: ./Docker-files/web
+	      # Specifies the path to the Dockerfile for building the frontend image.
+	    image: vprocontainers/vprofileweb
+	      # Custom image name for the frontend service.
+	    container_name: vproweb
+	      # Assigns a specific name to the web container.
+	    ports:
+	      - "80:80"
+	      # Maps the container's web server port (80) to the host for HTTP traffic.
+	volumes:
+	  vprodbdata: {}
+	  # Named volume to persist MySQL data across container restarts.
+	  vproappdata: {}
+	  # Named volume to persist backend application data or webapp files.
+	
+	
+	
+	
+	
+	
