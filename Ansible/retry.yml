@@ -1,0 +1,8 @@
+- name: Wait for nginx to respond
+  uri:
+    url: http://localhost
+    status_code: 200
+  register: nginx_response
+  until: nginx_response.status == 200
+  retries: 10
+  delay: 5
