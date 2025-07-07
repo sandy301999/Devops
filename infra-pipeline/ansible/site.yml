@@ -2,11 +2,19 @@
   hosts: web
   become: yes
   tasks:
-    - name: Install NGINX
+
+    - name: Install NGINX on Ubuntu
       apt:
         name: nginx
         state: present
         update_cache: yes
+      when: ansible_distribution == "Ubuntu"
+
+    - name: Install NGINX on Amazon Linux
+      yum:
+        name: nginx
+        state: present
+      when: ansible_distribution == "Amazon"
 
     - name: Start and enable NGINX
       service:
