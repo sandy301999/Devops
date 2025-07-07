@@ -1,23 +1,59 @@
 pipeline {
   agent any
 
-  stages {
-    stage('Terraform Apply') {
-      steps {
-        dir('terraform') {
-          sh 'terraform init'
-          sh 'terraform apply -auto-approve'
-          sh './terraform-inventory.sh'
-        }
-      }
-    }
+  environment {
+    ANSIBLE_IP = "44.204.185.142"
+  }
 
-    stage('Run Ansible') {
+  stages {
+    stage('Run Infra Provisioning on Ansible Server') {
       steps {
-        dir('ansible') {
-          sh 'ansible-playbook -i ../terraform/inventory.ini site.yml'
+        withCredentials([usernamePassword(credentialsId: 'ansibleadmin', usernameVariable: 'ANSIBLE_USER', passwordVariable: 'ANSIBLE_PASS')]) {
+          script {
+            try {
+              sh """
+              sshpass -p "$ANSIBLE_PASS" ssh -o StrictHostKeyChecking=no $ANSIBLE_USER@$ANSIBLE_IP '
+                set -e  # fail fast on any error
+                cd ~/Devops/infra-pipeline &&
+                git pull origin main &&
+                cd terraform &&
+                terraform init &&
+                terraform apply -auto-approve &&
+                chmod +x terraform-inventory.sh &&
+                ./terraform-inventory.sh &&
+                cd ../ansible &&
+                ansible-playbook -i ../terraform/inventory.ini site.yml
+              '
+              """
+            } catch (err) {
+              echo "❌ Ansible provisioning failed. Destroying resources..."
+              // Run terraform destroy remotely
+              sh """
+              sshpass -p "$ANSIBLE_PASS" ssh -o StrictHostKeyChecking=no $ANSIBLE_USER@$ANSIBLE_IP '
+                cd ~/Devops/infra-pipeline/terraform &&
+                terraform destroy -auto-approve
+              '
+              """
+              error "Provisioning failed. Infrastructure destroyed."
+            }
+          }
         }
       }
     }
   }
+
+post {
+    failure {
+        echo '❌ Provisioning failed. Cleaning up last line in inventory.ini...'
+        withCredentials([string(credentialsId: 'ansibleadmin', variable: 'ANSIBLE_PASS')]) {
+            sh """
+            sshpass -p "$ANSIBLE_PASS" ssh -o StrictHostKeyChecking=no root@${ANSIBLE_IP} '
+                sed -i "\\\$d" ~/Devops/infra-pipeline/terraform/inventory.ini
+            '
+            """
+        }
+    }
+}
+
+
 }
