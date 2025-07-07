@@ -1,6 +1,7 @@
 #!/bin/bash
-terraform output -raw public_ip > public_ip.txt
-PUBLIC_IP=$(cat public_ip.txt)
+terraform refresh >/dev/null
+
+PUBLIC_IP=$(terraform output -raw public_ip)
 
 cat <<EOF > inventory.ini
 [web]
