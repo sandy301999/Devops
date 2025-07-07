@@ -1,1 +1,42 @@
 
++-------------------+
+|      Jenkins      |
+| (Pipeline Trigger)|
++-------------------+
+          |
+          v
++----------------------------+
+|     Ansible Server (EC2)  |
+|  - Clones repo from GitHub|
+|  - Runs Terraform         |
++----------------------------+
+          |
+          v
++---------------------------+
+|     Terraform Module     |
+|  - Provisions 1..n EC2s   |
+|  - Outputs public IPs     |
++---------------------------+
+          |
+          v
++----------------------------+
+| terraform-inventory.sh    |
+| - Generates inventory.ini |
+| - One IP per line         |
++----------------------------+
+          |
+          v
++-----------------------------+
+|     Ansible Playbook       |
+| - Installs NGINX           |
+| - Based on OS (Ubuntu/Amazon) |
+| - Enables and starts service |
++-----------------------------+
+          |
+          v
++-----------------------------+
+|     Post-Deploy Check      |
+| - If Ansible fails         |
+| --> Terraform destroys infra |
+| - inventory.ini cleaned    |
++-----------------------------+
