@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dummy-ingress-controller
+  namespace: kube-system
+data:
+  controller-config: "This file should be replaced by actual ingress controller YAML"

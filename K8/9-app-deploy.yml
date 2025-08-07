@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vproapp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vproapp
+  template:
+    metadata:
+      labels:
+        app: vproapp
+    spec:
+      initContainers:
+        - name: check-vprodb
+          image: busybox
+          command: ['sh', '-c', 'until nc -zv vprodb 3306; do echo waiting for vprodb; sleep 2; done']
+        - name: check-vprocache01
+          image: busybox
+          command: ['sh', '-c', 'until nc -zv vprocache01 11211; do echo waiting for vprocache01; sleep 2; done']
+        - name: check-vpromq01
+          image: busybox
+          command: ['sh', '-c', 'until nc -zv vpromq01 5672; do echo waiting for vpromq01; sleep 2; done']
+      containers:
+        - name: vproapp
+          image: sansv/tomcat-app-image:v1
+          ports:
+            - name: vproapp-port
+              containerPort: 8080

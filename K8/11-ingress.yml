@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vpro-ingress
+  labels:
+    name: vpro-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: reva.sandysanj.site
+      http:
+        paths:
+          - pathType: Prefix
+            path: /
+            backend:
+              service:
+                name: vproapp
+                port:
+                  number: 8080
