@@ -1,0 +1,67 @@
+---
+- hosts: all
+  become: true
+  tasks:
+    - name: Install Apache on Ubuntu/Debian
+      apt:
+        name: apache2
+        state: present
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Install Apache on Amazon Linux/RedHat
+      yum:
+        name: httpd
+        state: present
+      when: ansible_os_family in ["RedHat", "Amazon"]
+
+    - name: Start and enable Apache2 (Ubuntu/Debian)
+      service:
+        name: apache2
+        state: started
+        enabled: true
+      when: ansible_os_family == "Debian"
+
+    - name: Start and enable httpd (Amazon Linux/RedHat)
+      service:
+        name: httpd
+        state: started
+        enabled: true
+      when: ansible_os_family in ["RedHat", "Amazon"]
+
+    - name: Download Tooplate template zip
+      get_url:
+        url: https://www.tooplate.com/zip-templates/2129_crispy_kitchen.zip
+        dest: /tmp/tooplate.zip
+
+    - name: Install unzip
+      package:
+        name: unzip
+        state: present
+
+    - name: Extract Tooplate template
+      unarchive:
+        src: /tmp/tooplate.zip
+        dest: /tmp/
+        remote_src: yes
+
+    - name: Copy website files to Apache root
+      copy:
+        src: /tmp/2129_crispy_kitchen/
+        dest: /var/www/html/
+        owner: root
+        group: root
+        mode: '0755'
+        remote_src: yes
+
+    - name: Restart Apache2 (Ubuntu/Debian)
+      service:
+        name: apache2
+        state: restarted
+      when: ansible_os_family == "Debian"
+
+    - name: Restart httpd (Amazon Linux/RedHat)
+      service:
+        name: httpd
+        state: restarted
+      when: ansible_os_family in ["RedHat", "Amazon"]

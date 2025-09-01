@@ -1,0 +1,36 @@
+---
+- hosts: all
+  become: true
+  tasks:
+    - name: Update package cache
+      apt:
+        update_cache: yes
+      when: ansible_os_family == "Debian"
+
+    - name: Update yum cache
+      yum:
+        update_cache: yes
+      when: ansible_os_family == "RedHat"
+
+    - name: Install packages
+      package:
+        name:
+          - curl
+          - wget
+          - git
+          - httpd
+        state: present
+
+    - name: Ensure httpd service is running
+      service:
+        name: httpd
+        state: restarted
+        enabled: true
+      when: ansible_os_family == "RedHat"
+
+    - name: Ensure apache2 service is running
+      service:
+        name: apache2
+        state: restarted
+        enabled: true
+      when: ansible_os_family == "Debian"
