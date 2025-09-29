@@ -1,42 +1,32 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: vprodb
-  labels:
-    app: vprodb
+  name: mysql
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: vprodb
+      app: mysql
   template:
     metadata:
       labels:
-        app: vprodb
+        app: mysql
     spec:
-      initContainers:
-        - name: delete-lost-found
-          image: busybox
-          command: ["sh", "-c", "rm -rf /var/lib/mysql/lost+found"]
-          volumeMounts:
-            - mountPath: /var/lib/mysql
-              name: vpro-db-data
       containers:
-        - name: vprodb
-          image: sansv/db-image
-          volumeMounts:
-            - mountPath: /var/lib/mysql
-              name: vpro-db-data
-          ports:
-            - name: vprodb-port
-              containerPort: 3306
-          env:
-            - name: MYSQL_ROOT_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: app-secret
-                  key: db-pass
+      - name: mysql
+        image: mysql:8.0
+        env:
+        - name: MYSQL_ROOT_PASSWORD
+          value: root123
+        - name: MYSQL_DATABASE
+          value: mydb
+        ports:
+        - containerPort: 3306
+        volumeMounts:
+        - name: mysql-storage
+          mountPath: /var/lib/mysql
       volumes:
-        - name: vpro-db-data
-          persistentVolumeClaim:
-            claimName: db-pvc-claim
+      - name: mysql-storage
+        hostPath:
+          path: /mnt/data/mysql   # host directory on EC2
+          type: DirectoryOrCreate
