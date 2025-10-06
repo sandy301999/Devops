@@ -1,17 +1,20 @@
 def COLOR_MAP = [
-    'SUCCESS': 'good', 
+    'SUCCESS': 'good',
     'FAILURE': 'danger',
 ]
 
 pipeline {
-    agent any
+    agent none   // define globally as none, each stage chooses its own agent
+
     tools {
         maven "MAVEN3"
         jdk "OracleJDK11"
     }
 
     stages {
+
         stage('Print error') {
+            agent { label 'master' }
             steps {
                 script {
                     try {
@@ -25,6 +28,7 @@ pipeline {
         }
 
         stage('Fetch code') {
+            agent { label 'git-agent' }
             steps {
                 retry(3) {
                     git branch: 'main', url: 'https://github.com/hkhcoder/vprofile-project.git'
@@ -33,6 +37,7 @@ pipeline {
         }
 
         stage('Build') {
+            agent { label 'build-agent' }
             steps {
                 retry(3) {
                     sh 'mvn clean install -DskipTests'
@@ -47,6 +52,7 @@ pipeline {
         }
 
         stage('Test') {
+            agent { label 'test-agent' }
             steps {
                 retry(2) {
                     sh 'mvn test'
@@ -55,6 +61,7 @@ pipeline {
         }
 
         stage('Checkstyle Analysis') {
+            agent { label 'qa-agent' }
             steps {
                 retry(2) {
                     sh 'mvn checkstyle:checkstyle'
@@ -63,6 +70,7 @@ pipeline {
         }
 
         stage('Sonar Analysis') {
+            agent { label 'sonar-agent' }
             environment {
                 scannerHome = tool 'sonar4.7'
             }
@@ -84,6 +92,7 @@ pipeline {
         }
 
         stage('Quality Gate') {
+            agent { label 'sonar-agent' }
             steps {
                 timeout(time: 1, unit: 'HOURS') {
                     waitForQualityGate abortPipeline: true
@@ -92,6 +101,7 @@ pipeline {
         }
 
         stage('UploadArtifact') {
+            agent { label 'deploy-agent' }
             steps {
                 retry(3) {
                     nexusArtifactUploader(
