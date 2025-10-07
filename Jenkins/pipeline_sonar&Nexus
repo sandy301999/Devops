@@ -1,164 +1,130 @@
 def COLOR_MAP = [
     'SUCCESS': 'good',
     'FAILURE': 'danger',
+    'UNSTABLE': 'warning'
 ]
 
 pipeline {
     agent none
 
     environment {
-        // Common tools
         MAVEN_HOME = tool 'MAVEN3'
-        JAVA_HOME  = tool 'OracleJDK11'
-        SCANNER_HOME = tool 'sonar4.7'
-
-        // Git details
-        GIT_URL = 'https://github.com/hkhcoder/vprofile-project.git'
-        GIT_BRANCH = 'main'
-
-        // SonarQube setup
-        SONAR_ENV = 'sonar'
-        SONAR_PROJECT_KEY = 'vprofile'
-        SONAR_PROJECT_NAME = 'vprofile'
-        SONAR_PROJECT_VERSION = '1.0'
-
-        // Nexus details
-        NEXUS_URL = '54.152.148.216:8081'
-        NEXUS_REPO = 'vprofile-repo'
-        NEXUS_CREDENTIALS = 'nexuslogin'
-        NEXUS_GROUP_ID = 'QA'
-        ARTIFACT_NAME = 'vproapp'
-        ARTIFACT_FILE = 'target/vprofile-v2.war'
-
-        // Slack
+        JAVA_HOME = tool 'JDK11'
         SLACK_CHANNEL = '#ci-cd'
-    }
-
-    tools {
-        maven "MAVEN3"
-        jdk "OracleJDK11"
+        AWS_REGION = 'ap-south-1'
+        ECR_REPO = '123456789012.dkr.ecr.ap-south-1.amazonaws.com/devops-app'
+        IMAGE_TAG = "${env.BUILD_NUMBER}"
+        K8S_DEPLOYMENT = 'devops-app'
+        K8S_NAMESPACE = 'production'
     }
 
     stages {
+        stage('Fetch Code') {
+            agent { label 'master' }
+            steps {
+                retry(3) {
+                    git branch: 'main', url: 'https://github.com/sandy/devops.git'
+                }
+            }
+        }
 
-        stage('Print error') {
+        stage('Build Code') {
             agent { label 'master' }
             steps {
                 script {
                     try {
-                        sh 'fake comment'
+                        sh "${MAVEN_HOME}/bin/mvn clean install -DskipTests"
                     } catch (Exception e) {
                         currentBuild.result = 'FAILURE'
                         echo "Error: ${e.message}"
+                        error("Build failed")
                     }
                 }
             }
         }
 
-        stage('Fetch code') {
-            agent { label 'git-agent' }
+        stage('Docker Build & Push to ECR') {
+            agent { label 'docker-agent' }
             steps {
-                retry(3) {
-                    git branch: "${GIT_BRANCH}", url: "${GIT_URL}"
-                }
-            }
-        }
-
-        stage('Build') {
-            agent { label 'build-agent' }
-            steps {
-                retry(3) {
-                    sh "${MAVEN_HOME}/bin/mvn clean install -DskipTests"
-                }
-            }
-            post {
-                success {
-                    echo "Archiving build artifacts..."
-                    archiveArtifacts artifacts: '**/*.war'
-                }
-            }
-        }
-
-        stage('Test') {
-            agent { label 'test-agent' }
-            steps {
-                retry(2) {
-                    sh "${MAVEN_HOME}/bin/mvn test"
-                }
-            }
-        }
-
-        stage('Checkstyle Analysis') {
-            agent { label 'qa-agent' }
-            steps {
-                retry(2) {
-                    sh "${MAVEN_HOME}/bin/mvn checkstyle:checkstyle"
-                }
-            }
-        }
-
-        stage('Sonar Analysis') {
-            agent { label 'sonar-agent' }
-            steps {
-                retry(2) {
-                    withSonarQubeEnv("${SONAR_ENV}") {
+                script {
+                    withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-cred-id'
+                    ]]) {
                         sh """
-                            ${SCANNER_HOME}/bin/sonar-scanner \
-                            -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                            -Dsonar.projectName=${SONAR_PROJECT_NAME} \
-                            -Dsonar.projectVersion=${SONAR_PROJECT_VERSION} \
-                            -Dsonar.sources=src/ \
-                            -Dsonar.java.binaries=target/test-classes/com/visualpathit/account/controllerTest/ \
-                            -Dsonar.junit.reportsPath=target/surefire-reports/ \
-                            -Dsonar.jacoco.reportsPath=target/jacoco.exec \
-                            -Dsonar.java.checkstyle.reportPaths=target/checkstyle-result.xml
+                            echo "Logging in to Amazon ECR..."
+                            aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPO}
+
+                            echo "Building Docker image..."
+                            docker build -t ${ECR_REPO}:${IMAGE_TAG} -f Dockerfile .
+
+                            echo "Pushing Docker image..."
+                            docker push ${ECR_REPO}:${IMAGE_TAG}
                         """
                     }
                 }
             }
         }
 
-        stage('Quality Gate') {
-            agent { label 'sonar-agent' }
+        stage('Deploy to ECS') {
+            agent { label 'ecs-agent' }
             steps {
-                timeout(time: 1, unit: 'HOURS') {
-                    waitForQualityGate abortPipeline: true
+                script {
+                    withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'aws-cred-id'
+                    ]]) {
+                        sh """
+                            echo "Updating ECS Service..."
+                            aws ecs update-service \
+                                --cluster devops-cluster \
+                                --service devops-service \
+                                --force-new-deployment \
+                                --region ${AWS_REGION}
+                        """
+                    }
                 }
             }
         }
 
-        stage('Upload Artifact') {
-            agent { label 'deploy-agent' }
+        stage('Kubernetes Deployment') {
+            agent { label 'k8s-agent' }
             steps {
-                retry(3) {
-                    nexusArtifactUploader(
-                        nexusVersion: 'nexus3',
-                        protocol: 'http',
-                        nexusUrl: "${NEXUS_URL}",
-                        groupId: "${NEXUS_GROUP_ID}",
-                        version: "${env.BUILD_ID}-${env.BUILD_TIMESTAMP}",
-                        repository: "${NEXUS_REPO}",
-                        credentialsId: "${NEXUS_CREDENTIALS}",
-                        artifacts: [
-                            [artifactId: "${ARTIFACT_NAME}",
-                             classifier: '',
-                             file: "${ARTIFACT_FILE}",
-                             type: 'war']
-                        ]
-                    )
+                script {
+                    withCredentials([kubeconfigFile(credentialsId: 'kubeconfig-cred-id', variable: 'KUBECONFIG')]) {
+                        sh """
+                            echo "Deploying to Kubernetes..."
+                            kubectl set image deployment/${K8S_DEPLOYMENT} ${K8S_DEPLOYMENT}=${ECR_REPO}:${IMAGE_TAG} -n ${K8S_NAMESPACE}
+                            kubectl rollout status deployment/${K8S_DEPLOYMENT} -n ${K8S_NAMESPACE}
+                        """
+                    }
                 }
             }
         }
     }
 
     post {
-        always {
-            echo 'Sending Slack notification...'
+        success {
+            echo '✅ Build & Deployment Successful!'
             slackSend(
                 channel: "${SLACK_CHANNEL}",
-                color: COLOR_MAP[currentBuild.currentResult],
-                message: "*${currentBuild.currentResult}:* Job ${env.JOB_NAME} build ${env.BUILD_NUMBER}\nMore info at: ${env.BUILD_URL}"
+                color: COLOR_MAP['SUCCESS'],
+                message: "*SUCCESS:* Job `${env.JOB_NAME}` build `${env.BUILD_NUMBER}`\n<${env.BUILD_URL}|View Job Details>"
             )
+        }
+
+        failure {
+            echo '❌ Build Failed!'
+            slackSend(
+                channel: "${SLACK_CHANNEL}",
+                color: COLOR_MAP['FAILURE'],
+                message: "*FAILURE:* Job `${env.JOB_NAME}` build `${env.BUILD_NUMBER}`\n<${env.BUILD_URL}|View Job Details>"
+            )
+        }
+
+        always {
+            echo '📘 Cleaning up workspace...'
+            cleanWs()
         }
     }
 }
