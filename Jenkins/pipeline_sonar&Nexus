@@ -1,3 +1,22 @@
+
+pipeline {
+  agent any
+
+  stages {
+    stage('Deploy to Server') {
+      steps {
+        // Use Jenkins stored credentials securely
+        withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'SSH_KEY')]) {
+          sh '''
+            echo "Connecting to EC2 instance..."
+            ssh -i $SSH_KEY ec2-user@10.0.1.20 "sudo systemctl restart myapp"
+          '''
+        }
+      }
+    }
+  }
+}
+
 def COLOR_MAP = [
     'SUCCESS': 'good',
     'FAILURE': 'danger',
