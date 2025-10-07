@@ -1,6 +1,7 @@
 withCredentials([sshUserPrivateKey(credentialId: 'name_ex', keyFileVariable: 'SSH_KEY')])
 withCredentials([usernamePassword(credentialId:"name", usernameVariable: "nex_id", passwordVariable: "nex_pass")])
 
+
 def COLOR_MAP = [
     'SUCCESS': 'good',
     'FAILURE': 'danger',
@@ -46,60 +47,64 @@ pipeline {
             }
         }
 
-        stage('Docker Build & Push to ECR') {
-            agent { label 'docker-agent' }
-            steps {
-                script {
-                    withCredentials([[
-                        $class: 'AmazonWebServicesCredentialsBinding',
-                        credentialsId: 'aws-cred-id'
-                    ]]) {
-                        sh """
-                            echo "Logging in to Amazon ECR..."
-                            aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPO}
+        stage('Deployments in Parallel') {
+            parallel {
+                stage('Docker Build & Push to ECR') {
+                    agent { label 'docker-agent' }
+                    steps {
+                        script {
+                            withCredentials([[
+                                $class: 'AmazonWebServicesCredentialsBinding',
+                                credentialsId: 'aws-cred-id'
+                            ]]) {
+                                sh """
+                                    echo "Logging in to Amazon ECR..."
+                                    aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPO}
 
-                            echo "Building Docker image..."
-                            docker build -t ${ECR_REPO}:${IMAGE_TAG} -f Dockerfile .
+                                    echo "Building Docker image..."
+                                    docker build -t ${ECR_REPO}:${IMAGE_TAG} -f Dockerfile .
 
-                            echo "Pushing Docker image..."
-                            docker push ${ECR_REPO}:${IMAGE_TAG}
-                        """
+                                    echo "Pushing Docker image..."
+                                    docker push ${ECR_REPO}:${IMAGE_TAG}
+                                """
+                            }
+                        }
                     }
                 }
-            }
-        }
 
-        stage('Deploy to ECS') {
-            agent { label 'ecs-agent' }
-            steps {
-                script {
-                    withCredentials([[
-                        $class: 'AmazonWebServicesCredentialsBinding',
-                        credentialsId: 'aws-cred-id'
-                    ]]) {
-                        sh """
-                            echo "Updating ECS Service..."
-                            aws ecs update-service \
-                                --cluster devops-cluster \
-                                --service devops-service \
-                                --force-new-deployment \
-                                --region ${AWS_REGION}
-                        """
+                stage('Deploy to ECS') {
+                    agent { label 'ecs-agent' }
+                    steps {
+                        script {
+                            withCredentials([[
+                                $class: 'AmazonWebServicesCredentialsBinding',
+                                credentialsId: 'aws-cred-id'
+                            ]]) {
+                                sh """
+                                    echo "Updating ECS Service..."
+                                    aws ecs update-service \
+                                        --cluster devops-cluster \
+                                        --service devops-service \
+                                        --force-new-deployment \
+                                        --region ${AWS_REGION}
+                                """
+                            }
+                        }
                     }
                 }
-            }
-        }
 
-        stage('Kubernetes Deployment') {
-            agent { label 'k8s-agent' }
-            steps {
-                script {
-                    withCredentials([kubeconfigFile(credentialsId: 'kubeconfig-cred-id', variable: 'KUBECONFIG')]) {
-                        sh """
-                            echo "Deploying to Kubernetes..."
-                            kubectl set image deployment/${K8S_DEPLOYMENT} ${K8S_DEPLOYMENT}=${ECR_REPO}:${IMAGE_TAG} -n ${K8S_NAMESPACE}
-                            kubectl rollout status deployment/${K8S_DEPLOYMENT} -n ${K8S_NAMESPACE}
-                        """
+                stage('Kubernetes Deployment') {
+                    agent { label 'k8s-agent' }
+                    steps {
+                        script {
+                            withCredentials([kubeconfigFile(credentialsId: 'kubeconfig-cred-id', variable: 'KUBECONFIG')]) {
+                                sh """
+                                    echo "Deploying to Kubernetes..."
+                                    kubectl set image deployment/${K8S_DEPLOYMENT} ${K8S_DEPLOYMENT}=${ECR_REPO}:${IMAGE_TAG} -n ${K8S_NAMESPACE}
+                                    kubectl rollout status deployment/${K8S_DEPLOYMENT} -n ${K8S_NAMESPACE}
+                                """
+                            }
+                        }
                     }
                 }
             }
@@ -112,22 +117,4 @@ pipeline {
             slackSend(
                 channel: "${SLACK_CHANNEL}",
                 color: COLOR_MAP['SUCCESS'],
-                message: "*SUCCESS:* Job `${env.JOB_NAME}` build `${env.BUILD_NUMBER}`\n<${env.BUILD_URL}|View Job Details>"
-            )
-        }
-
-        failure {
-            echo '❌ Build Failed!'
-            slackSend(
-                channel: "${SLACK_CHANNEL}",
-                color: COLOR_MAP['FAILURE'],
-                message: "*FAILURE:* Job `${env.JOB_NAME}` build `${env.BUILD_NUMBER}`\n<${env.BUILD_URL}|View Job Details>"
-            )
-        }
-
-        always {
-            echo '📘 Cleaning up workspace...'
-            cleanWs()
-        }
-    }
-}
+                message: "*SUCCESS:* Job `${env.JOB_NAME}` build `${env._
